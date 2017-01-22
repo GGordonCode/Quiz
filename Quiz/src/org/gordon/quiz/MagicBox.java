@@ -25,35 +25,24 @@ package org.gordon.quiz;
  * the computational infeasibility.
  * 
  * Note each score computation for a given set of flipped columns is independent, so do
- * the computation in parallel.  We note that for these small data sets, parallelization doesn't
- * appear to help that much, so it could be removed.
+ * the computation in parallel.  We note that for mall data sets, parallelization doesn't
+ * appear to help that much, but for larger sets (~20), we notice a speedup.
  */
 
 import java.util.BitSet;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.LongStream;
 
 public class MagicBox {
-	
-	// The winner that is refined as we try all possibilities.  Atomic for concurrent access.
-	private AtomicReference<SolutionWrapper> winner;
-	
-	// The number of rows in the current box.
-	private int rows;
-	
-	// The number of columns in the current box.
-	private int columns;
-	
-	// The box!
-	private byte[][] box;
 
 	public static void main(String[] args) {
-		SolutionWrapper sw = new MagicBox(new byte[][]{
-			{0, 0, 1, 0, 0}, {0, 0, 1, 0, 0}, {0, 0, 1, 1, 0}, { 0, 0, 0, 1, 1}, { 0, 0, 0, 1, 1 }}).solve();
+		MagicBox mb = new MagicBox();
+		Solution sw = mb.solve(new byte[][]{
+			{0, 0, 1, 0, 0}, {0, 0, 1, 0, 0}, {0, 0, 1, 1, 0}, { 0, 0, 0, 1, 1}, { 0, 0, 0, 1, 1 }});
 		System.out.println("winner is: " + sw);
 
-		int numCol = 10;
+		// For timing purposes.
+		int numCol = 30;
 		byte[][] b2 = new byte[4][];
 		Random r = new Random();
 		for (int i = 0; i < 4; i++) {
@@ -62,29 +51,44 @@ public class MagicBox {
 				b2[i][j] = r.nextBoolean() ? (byte) 1 : (byte) 0;
 			}	
 		}
-		System.out.println("lotsa columns: " + new MagicBox(b2).solve());
-	}
-	
-	public MagicBox(byte[][] box) {
-		this.box = box;
-		winner = new AtomicReference<SolutionWrapper>();
+		System.out.println("lotsa columns: " + mb.solve(b2));
 	}
 
 	// Assume rectangular matrix.
-	public SolutionWrapper solve() {
-		rows = box.length;
-		columns = box[0].length;
-		long limit = (long) Math.pow(2, columns) - 1;
+	public Solution solve(final byte[][] box) {
+		final int columns = box[0].length;
+		if (columns > Long.SIZE) {
+			throw new IllegalArgumentException("Maximum allowed column size is " + Long.SIZE);
+		}
+		for (int i = 1; i < box.length; i++) {
+			if (box[i].length != columns) {
+				throw new IllegalArgumentException("Non-rectangular box specified!");
+			}
+		}
+		final long limit = (long) Math.pow(2, columns) - 1;
 		long pstart = System.currentTimeMillis();
-		LongStream.range(0, limit).parallel().forEach(this::scoreSolution);
+
+		Solution solution = LongStream.range(1, limit).parallel().mapToObj(l -> scoreSolution(box, l))
+				.reduce(scoreSolution(box, 0),
+						(r, e) -> {
+							if (e.getScore() > r.getScore() || (e.getScore() == r.getScore()
+									&& e.getFlips().cardinality() < r.getFlips().cardinality())) {
+								return e;
+							} else {
+								return r;
+							}
+						});
+
 		long pend = System.currentTimeMillis();
 		System.out.printf("parallel long (%d) took: %d%n", columns, (pend - pstart));
-		return winner.get();
+		return solution;
 	}
 
 	// Count the number of rows with identical values given the current mask.
 	// Note we do the flip "in-place" without actually changing the original array.
-	private void scoreSolution(long flipMask) {
+	private Solution scoreSolution(final byte[][] box, final long flipMask) {
+		final int rows = box.length;
+		final int columns = box[0].length;
 		int score = 0;
 		for (int i = 0; i < rows; i++) {
 			int j = 0;
@@ -110,25 +114,9 @@ public class MagicBox {
 			}
 		}
 		
-		// Should really comment out this print with parallel stream.
-		//System.out.println("Score for flip " + BitSet.valueOf(new long[]{flipMask}) + " = " + score);
-		final int theScore = score; // Ack! Java, you should recognize score is
-									// unmodified onwards.
-		
-		// Atomically update the best solution if the current one is the best so far.
-		winner.getAndUpdate(old -> {
-			if (old == null || theScore > old.score) {
-				return new SolutionWrapper(BitSet.valueOf(new long[] { flipMask }), theScore);
-			} else if (theScore == old.score) {
-				// Only the shortest but set is the winner - if there are multiple shortest winners,
-				// we pick the first found.
-				BitSet bs = BitSet.valueOf(new long[] { flipMask });
-				if (bs.cardinality() < old.flips.cardinality()) {
-					return new SolutionWrapper(bs, theScore);
-				}
-			} 
-			return old;
-		});
+		Solution sol = new Solution(BitSet.valueOf(new long[] { flipMask }), score);
+		//System.out.println(sol);
+		return sol;
 	}
 	
 	/**
@@ -136,7 +124,7 @@ public class MagicBox {
 	 * leading to that score.
 	 *
 	 */
-	public static class SolutionWrapper {
+	public static class Solution {
 		private BitSet flips;
 		private int score;
 
@@ -145,7 +133,7 @@ public class MagicBox {
 		 * @param flips set of bits corresponding to the columns that were flipped.
 		 * @param score the number of rows that are uniform as a result of the flip
 		 */
-		public SolutionWrapper(BitSet flips, int score) {
+		public Solution(BitSet flips, int score) {
 			this.flips = flips;
 			this.score = score;
 		}
@@ -168,7 +156,7 @@ public class MagicBox {
 		
 		@Override
 		public String toString() {
-			return String.format("BitSet: %s, score: %d\n", flips, score);
+			return String.format("BitSet: %s, score: %d", flips, score);
 		}
 	}
 }
