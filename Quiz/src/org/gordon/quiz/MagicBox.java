@@ -54,7 +54,15 @@ public class MagicBox {
 		System.out.println("lotsa columns: " + mb.solve(b2));
 	}
 
-	// Assume rectangular matrix.
+	/**
+	 * Solves the Magic Box problem for a given two dimensional array of 0's and 1's.
+	 * The array should be rectangular, and the maximum number of columns is 64 bits
+	 * (a bit for each column to flip).
+	 * @param box the box to solve
+	 * @return the <code>Solution/code> object containing the maximum score and columns
+	 * flipped to accomplish this.  Note the answer will be the one with the highest score
+	 * requiring the fewest columns to flip (ties are resolved arbitrarily).
+	 */
 	public Solution solve(final byte[][] box) {
 		final int columns = box[0].length;
 		if (columns > Long.SIZE) {
