@@ -73,7 +73,7 @@ public class MagicBox {
 				throw new IllegalArgumentException("Non-rectangular box specified!");
 			}
 		}
-		final long limit = (long) Math.pow(2, columns) - 1;
+		final long limit = (long) (Math.pow(2, columns) - 1);
 		long pstart = System.currentTimeMillis();
 
 		Solution solution = LongStream.range(1, limit).parallel().mapToObj(l -> scoreSolution(box, l))
