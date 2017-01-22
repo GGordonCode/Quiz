@@ -24,8 +24,8 @@ package org.gordon.quiz;
  * of 64 columns (the limit a long will allow), but I went with the simpler long-based approach due to
  * the computational infeasibility.
  * 
- * Note each score computation for a given set of flipped columns is independent, so do
- * the computation in parallel.  We note that for mall data sets, parallelization doesn't
+ * Note each score computation for a given set of flipped columns is independent, so we do
+ * the computation in parallel.  We note that for small data sets, parallelization doesn't
  * appear to help that much, but for larger sets (~20), we notice a speedup.
  */
 
