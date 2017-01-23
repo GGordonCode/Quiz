@@ -15,14 +15,15 @@ package org.gordon.quiz;
  * 0 1 1 1 0
  * 
  * There exists a Knuth "L" algorithm to find all the unique permutations of a set, but in the
- * spirit of the challenge, we don't use this because it's, well, it's cheating!
+ * spirit of the challenge, we don't use this because it's, well, it's cheating!  Besides, this
+ * is a very specific subset needed here, only 0's and 1's.
  * 
- * Instead we observe that if there a n columns to flip, if we generate the sequence [0, 2**n - 1],
+ * Instead we observe that if there are n columns to flip, if we generate the sequence [0, 2**n - 1],
  * this includes all possible bit patterns of 0 and 1 without duplications, and we can do this
  * without using recursion.  Nevertheless, without tweaking the JVM parameters, the computation
- * becomes prohibitive at around 30 columns.  I had coded a solution using BigInteger to avoid the limit
- * of 64 columns (the limit a long will allow), but I went with the simpler long-based approach due to
- * the computational infeasibility.
+ * becomes prohibitive at around 30 columns (at least on my old laptop running Java from the IDE).
+ * I had coded a solution using BigInteger to avoid the limit of 64 columns (the limit a long will allow),
+ * but I went with the simpler long-based approach due to the apparent computational infeasibility.
  * 
  * Note each score computation for a given set of flipped columns is independent, so we do
  * the computation in parallel.  We note that for small data sets, parallelization doesn't
@@ -76,8 +77,13 @@ public class MagicBox {
 		final long limit = (long) (Math.pow(2, columns) - 1);
 		long pstart = System.currentTimeMillis();
 
-		Solution solution = LongStream.range(1, limit).parallel().mapToObj(l -> scoreSolution(box, l))
-				.reduce(scoreSolution(box, 0),
+		// N.B. The "identity" element I for reduce() must be such that the relation
+		// accumulator.apply(I, E) = E for all elements E.  If we chose a Solution with a
+		// score of -1 for the identity, the compare will always select E, so this will suffice.
+		// Also, note we can skip the bit pattern with all 1's (2**n - 1), as it will yield the
+		// same score as the bit pattern with no bits set, i.e. 0.
+		Solution solution = LongStream.range(0, limit).parallel().mapToObj(l -> scoreSolution(box, l))
+				.reduce(new Solution(new BitSet(), -1),
 						(r, e) -> {
 							if (e.getScore() > r.getScore() || (e.getScore() == r.getScore()
 									&& e.getFlips().cardinality() < r.getFlips().cardinality())) {
