@@ -73,9 +73,6 @@ public class MagicBox {
 			if (box[i].length != columns) {
 				throw new IllegalArgumentException("Non-rectangular box specified!");
 			}
-			if (box[i].length > Long.SIZE) {
-				throw new IllegalArgumentException("Maximum allowed column size is " + Long.SIZE);
-			}
 		}
 		final long limit = (long) (Math.pow(2, columns) - 1);
 		long pstart = System.currentTimeMillis();
