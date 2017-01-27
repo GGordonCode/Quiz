@@ -57,6 +57,13 @@ public class MagicBox {
 		System.out.println("winner is " + sw);
 		sw = mb.solveMutable(shouldScoreTwoFlippingOneColumn);
 		System.out.println("winner is " + sw);
+		
+		byte[][] instantWinner = {
+				{1, 1, 1, 1, 1}, {1, 1, 1, 1, 1}, {1, 1, 1, 1, 1}, { 1, 1, 1, 1, 1}, { 1, 1, 1, 1, 1 }};
+		sw = mb.solveImmutable(instantWinner);
+		System.out.println("winner is " + sw);
+		sw = mb.solveMutable(instantWinner);
+		System.out.println("winner is " + sw);
 
 		// For timing purposes.
 		for (int numCol = 10; numCol < 30; numCol++) {
@@ -97,6 +104,11 @@ public class MagicBox {
 				throw new IllegalArgumentException("Non-rectangular box specified!");
 			}
 		}
+		
+		// Outlier: we are already at a complete solution.
+		if (scoreSolution(box, 0).score == box.length)
+			return new Solution(box.length, new BitSet());
+
 		final long limit = (long) (Math.pow(2, columns) - 1);
 		long pstart = System.currentTimeMillis();
 
@@ -106,7 +118,7 @@ public class MagicBox {
 		// Also, note we can skip the bit pattern with all 1's (2**n - 1), as it will yield the
 		// same score as the bit pattern with no bits set, i.e. 0.
 		Solution solution = LongStream.range(0, limit).parallel().mapToObj(l -> scoreSolution(box, l))
-				.reduce(new Solution(new BitSet(), -1),
+				.reduce(new Solution(-1, new BitSet()),
 						(r, e) -> {
 							if (e.getScore() > r.getScore() || (e.getScore() == r.getScore()
 									&& e.getFlips().cardinality() < r.getFlips().cardinality())) {
@@ -154,7 +166,7 @@ public class MagicBox {
 			}
 		}
 
-		Solution sol = new Solution(BitSet.valueOf(new long[] { flipMask }), score);
+		Solution sol = new Solution(score, BitSet.valueOf(new long[] { flipMask }));
 		// System.out.println(sol);
 		return sol;
 	}
@@ -184,6 +196,10 @@ public class MagicBox {
 				throw new IllegalArgumentException("Non-rectangular box specified!");
 			}
 		}
+		
+		// Outlier: we are already at a complete solution.
+		if (scoreSolution(box, 0).score == box.length)
+			return new Solution(box.length, new BitSet());
 
 		final long limit = (long) (Math.pow(2, columns) - 1);
 		final AtomicReference<Solution> winner = new AtomicReference<>();
@@ -242,14 +258,14 @@ public class MagicBox {
 			// for a Solution that cannot possible be a winner.
 			winner.getAndUpdate(old -> {
 				if (old == null || theScore > old.score) {
-					return new Solution(BitSet.valueOf(new long[] { flipMask }), theScore);
+					return new Solution(theScore, BitSet.valueOf(new long[] { flipMask }));
 				} else if (theScore == old.score) {
 					// Only the shortest but set is the winner - if there are
 					// multiple shortest winners,
 					// we pick the first found.
 					BitSet bs = BitSet.valueOf(new long[] { flipMask });
 					if (bs.cardinality() < old.flips.cardinality()) {
-						return new Solution(bs, theScore);
+						return new Solution(theScore, bs);
 					}
 				}
 				return old;
@@ -263,15 +279,15 @@ public class MagicBox {
 	 *
 	 */
 	public static class Solution {
-		private BitSet flips;
 		private int score;
+		private BitSet flips;
 
 		/**
 		 * Create a new Solution object.
 		 * @param flips set of bits corresponding to the columns that were flipped.
 		 * @param score the number of rows that are uniform as a result of the flip
 		 */
-		public Solution(BitSet flips, int score) {
+		public Solution(int score, BitSet flips) {
 			this.flips = flips;
 			this.score = score;
 		}
