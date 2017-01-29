@@ -24,7 +24,7 @@ package org.gordon.quiz;
  * without using recursion.  Nevertheless, without tweaking the JVM parameters, the computation
  * becomes very slow (but does not go OOM) at around 30 columns (at least on my old 2010 Quad Core i7
  * 1.73 GHz laptop running Java from the IDE).  I had coded a solution using BigInteger to avoid the
- * limit of 64 columns (the limit a long will allow), but using longs is simpler to read and fine to
+ * limit of 63 columns (the limit a long will allow), but using longs is simpler to read and fine to
  * demonstrate the concept.
  * 
  * Note each score computation for a given set of flipped columns is independent, so we may do
@@ -44,6 +44,7 @@ package org.gordon.quiz;
 
 import java.util.BitSet;
 import java.util.Random;
+import java.util.function.BinaryOperator;
 import java.util.stream.LongStream;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -81,10 +82,20 @@ public class MagicBox {
 	}
 	
 	// Immutable solution first.
+	
+	// The lambda to be used by reduce() to choose the better of two solutions.
+	BinaryOperator<Solution> chooseBetterSolution = (Solution s1, Solution s2) -> {
+		if (s1.getScore() > s2.getScore() || (s1.getScore() == s2.getScore()
+				&& s1.getFlips().cardinality() < s2.getFlips().cardinality())) {
+			return s1;
+		} else {
+			return s2;
+		}
+	};
 
 	/**
 	 * Solves the Magic Box problem for a given two dimensional array of 0's and 1's.
-	 * The array should be rectangular, and the maximum number of columns is 64 bits
+	 * The array should be rectangular, and the maximum number of columns is 63 bits
 	 * (a bit for each column to flip).  This approach creates and compares immutable objects,
 	 * as per "pure" functional programming, and reduces to the winning solution by comparing
 	 * computed Solution objects.
@@ -96,8 +107,8 @@ public class MagicBox {
 	public Solution solveImmutable(final byte[][] box) {
 		// Note: common code for immutable and mutable cases *not* refactored to preserve clarity.
 		final int columns = box[0].length;
-		if (columns > Long.SIZE) {
-			throw new IllegalArgumentException("Maximum allowed column size is " + Long.SIZE);
+		if (columns > (Long.SIZE - 1)) {
+			throw new IllegalArgumentException("Maximum allowed column size is " + (Long.SIZE - 1));
 		}
 		for (int i = 1; i < box.length; i++) {
 			if (box[i].length != columns) {
@@ -106,27 +117,24 @@ public class MagicBox {
 		}
 		
 		// Outlier: we are already at a complete solution.
-		if (scoreSolution(box, 0).score == box.length)
+		final Solution initialState = scoreSolution(box, 0);
+		if (initialState.score == box.length)
 			return new Solution(box.length, new BitSet());
 
 		final long limit = (long) (Math.pow(2, columns) - 1);
 		long pstart = System.currentTimeMillis();
 
-		// N.B. The "identity" element I for reduce() must be such that the relation
-		// accumulator.apply(I, E) = E for all elements E.  If we chose a Solution with a
-		// score of -1 for the identity, the compare will always select E, so this will suffice.
-		// Also, note we can skip the bit pattern with all 1's (2**n - 1), as it will yield the
-		// same score as the bit pattern with no bits set, i.e. 0.
+		// The strategy is to map each long value to a Solution object, filter out those
+		// that cannot possibly be a winner (score not greater than initial score with
+		// fewer flips), and then finally the reduce/compare to find the best among
+		// remaining candidates.  N.B. The "identity" element I for reduce() must be such
+		// that the relation accumulator.apply(I, E) = E for all elements E.  If we chose a
+		// Solution with a score of -1 for the identity, the compare will always select E,
+		// so this will suffice.  Also, note we can skip the bit pattern with all 1's (2**n - 1),
+		// as it will yield the same score as the bit pattern with no bits set, i.e. 0.
 		Solution solution = LongStream.range(0, limit).parallel().mapToObj(l -> scoreSolution(box, l))
-				.reduce(new Solution(-1, new BitSet()),
-						(r, e) -> {
-							if (e.getScore() > r.getScore() || (e.getScore() == r.getScore()
-									&& e.getFlips().cardinality() < r.getFlips().cardinality())) {
-								return e;
-							} else {
-								return r;
-							}
-						});
+				.filter(s -> s.getScore() > initialState.getScore() || s.getFlips().cardinality() == 0)
+				.reduce(new Solution(-1, new BitSet()), chooseBetterSolution);
 
 		long pend = System.currentTimeMillis();
 		System.out.printf("parallel immutable (%d) took: %d%n", columns, (pend - pstart));
@@ -175,7 +183,7 @@ public class MagicBox {
 	
 	/**
 	 * Solves the Magic Box problem for a given two dimensional array of 0's and 1's.
-	 * The array should be rectangular, and the maximum number of columns is 64 bits
+	 * The array should be rectangular, and the maximum number of columns is 63 bits
 	 * (a bit for each column to flip).  This solution avoids creation of all the temporary
 	 * Solution objects of the immutable case and instead updates an AtomicReference if we have
 	 * a new winner, but it appears to be significantly slower for larger data sets due to contention
@@ -188,8 +196,8 @@ public class MagicBox {
 	public Solution solveMutable(final byte[][] box) {
 		// Note: common code for immutable and mutable cases *not* refactored to preserve clarity.
 		final int columns = box[0].length;
-		if (columns > Long.SIZE) {
-			throw new IllegalArgumentException("Maximum allowed column size is " + Long.SIZE);
+		if (columns > (Long.SIZE - 1)) {
+			throw new IllegalArgumentException("Maximum allowed column size is " + (Long.SIZE - 1));
 		}
 		for (int i = 1; i < box.length; i++) {
 			if (box[i].length != columns) {
@@ -207,7 +215,8 @@ public class MagicBox {
 
 		// Note we can skip the bit pattern with all 1's (2**n - 1), as it will yield the
 		// same score as the bit pattern with no bits set, i.e. 0.
-		// Remove the .parallel() to compare parallel with sequential.
+		// Remove/add the .parallel() to compare parallel with sequential.
+		//LongStream.range(0, limit).forEach(l -> comapreAndUpdateSolution(box, l, winner));
 		LongStream.range(0, limit).parallel().forEach(l -> comapreAndUpdateSolution(box, l, winner));
 
 		long pend = System.currentTimeMillis();
