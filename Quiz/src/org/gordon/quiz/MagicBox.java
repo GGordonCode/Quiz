@@ -38,17 +38,22 @@ package org.gordon.quiz;
  * 3. A refinement on approach 2, where we use a RecursiveTasks with the ForkJoinPool to "divide and
  * conquer", and then compare smaller subsets, eventually finding the best solution among subsets.
  * Here we avoid the temporary objects, but bear the cost of recursion.  To offset the recursion costs,
- * we only create a new thread on the left side of the recursion.  Still left to do is see if the work
- * stealing API of ForkJoinTasks can further refine this.
+ * we only create a new thread on the left side of the recursion.  Unfortunately the algorithm is not
+ * one where tail recursion optimization can be applied (manually).  This requires further exploration,
+ * but the fact is that we need to do two child calculations and then compare them.  Still also left to
+ * do is see if the work-stealing API of ForkJoinTasks can further improve the numbers.
  * 
- * Observed results: the pure functional approach (1) is the fastest, with the refined recursive
- * algorithm (3) being only a few percentage points behind.  In fact for larger boxes, the third approach
- * appears to sometimes run a hair faster than the first approach.  The approach of globally comparing
- * and updating the atomic reference is about 20-30% slower, so the contention for exclusive access to
- * the resource appears to be an issue.  Apparently the extra temp objects in the best approach are
- * worth it for whatever streamlining and compiler optimizations can be used by the functional approach.
- * Note the particular random set of 0's and 1's generated also probably affects the times (although we
- * use the same box for all solutions for a given run).
+ * Observed results: adding the optimization to cases 2 and 3 to not compare solutions that could not
+ * possibly be winners sped them up to actually make them faster than the pure immutable approach (1).
+ * I suspect the overhead of the extra object creation in (1) is a big part of the issue.  Also, in the
+ * pure functional approach we are forced to deal with Objects and not primitive types due to the parameterized
+ * types, where in (2) and (3), we can do a lot of the comparisons using raw ints and avoid boxing.  Finally,
+ * the divide and conquer of (3) is essentially a refinement of (2), and this partitioning into smaller
+ * problems makes it into the fastest solution.
+ * 
+ * Conclusion: in evolving through various strategies and optimizing the approach to best handle the most
+ * likely data sets, I went from the point where what was by far the fastest approach (1) became the slowest
+ * one, at least for the randomly generated data.
  */
 
 import java.util.BitSet;
@@ -123,10 +128,13 @@ public class MagicBox {
         long pstart = System.currentTimeMillis();
         Solution initialState = new Solution(computeScore(box, 0), new BitSet());
 
-        // The strategy is to map each long value to a Solution object, filter out those
-        // that cannot possibly be a winner (score not greater than initial score with
-        // fewer flips), and then finally the reduce/compare to find the best among
-        // remaining candidates. N.B. The "identity" element I for reduce() must be such
+        // The strategy is to map each long value denoting bit flips to a Solution object,
+        // filter out those Solutions that cannot possibly be a winner (score not greater
+        // than initial score with fewer flips), and then finally the reduce/compare to find
+        // the best among remaining candidates.  The filter significantly reduces the number
+        // of Solution comparisons needed, at least for random data.
+        //
+        // N.B. The "identity" element I for reduce() must be such
         // that the relation accumulator.apply(I, E) = E for all elements E. If we chose a
         // Solution with a score of -1 for the identity, the compare will always select E,
         // so this will suffice. Also, note we can skip the bit pattern with all 1's (2**n - 1),
@@ -168,14 +176,18 @@ public class MagicBox {
         // Calculate the search parameters given the box.
         final int columns = box[0].length;
         final long limit = (long) (Math.pow(2, columns) - 1);
-        final AtomicReference<Solution> winnerRef = new AtomicReference<>();
+        
+        // Start with the initial score in the atomic reference.
+        final AtomicReference<Solution> winnerRef = new AtomicReference<Solution>(
+                new Solution(computeScore(box, 0), new BitSet()));
         long pstart = System.currentTimeMillis();
 
         // Note we can skip the bit pattern with all 1's (2**n - 1), as it will yield the
         // same score as the bit pattern with no bits set, i.e. 0.  Remove/add the .parallel()
         // to compare parallel with sequential.
+        Solution initialState = new Solution(computeScore(box, 0), new BitSet());
         LongStream.range(0, limit).parallel()
-            .forEach(l -> updateBestSolution(computeScore(box, l), l, winnerRef));
+            .forEach(l -> updateBestSolution(computeScore(box, l), l, initialState.score, winnerRef));
 
         long pend = System.currentTimeMillis();
         System.out.printf("parallel mutable (%d) took: %d%n", columns, (pend - pstart));
@@ -186,14 +198,22 @@ public class MagicBox {
     // Compare this solution against the best solution seen so far, and update
     // if this is the best Solution seen so far. Note we do the flip "in-place"
     // without actually changing the original array.
-    private void updateBestSolution(final int score, final long flipMask,
+    private void updateBestSolution(final int score, final long flipMask, final int initialScore,
             final AtomicReference<Solution> winner) {
+
+        // This is the equivalent of the filter() we had for the immutable case and adding this renders
+        // the mutable solutions faster than the immutable one.  For large randomly generated boxes, we
+        // get a lot of 0 or low scores that are no better than the initial score, so we can remove much
+        // of the atomic reference contention by avoiding guaranteed losing solutions against other losers.
+        if (score <= initialScore) {
+            return;
+        }
 
         // Atomically update the best solution if the current one is the
         // best so far. Note we avoid having to create a Solution object
         // for a Solution that cannot possible be a winner.
         winner.getAndUpdate(old -> {
-            if (old == null || score > old.score) {
+            if (score > old.score) {
                 return new Solution(score, BitSet.valueOf(new long[] { flipMask }));
             } else if (score == old.score) {
                 // Only the shortest but set is the winner - if there are
@@ -259,17 +279,17 @@ public class MagicBox {
             this.end = end;
             this.box = box;
         }
-
-        @Override
+      
         /**
          * The recursive guts of the solution.  If the sub-range is below the threshold,
          * compute it linearly, else divide and conquer, but only fork the left half.
          *
          * @return the best solution form the subrange.
          */
+        @Override
         public Solution compute() {
             if ((end - start) <= THRESHOLD) {
-                return calculateLeaf(box, start, end);
+                return calculateLeaf(box, start, end, new Solution(computeScore(box, 0), new BitSet()));
             } else {
                 long mid = (start + end) >>> 1;
                 SolutionFinder lfinder = new SolutionFinder(box, start, mid);
@@ -281,10 +301,11 @@ public class MagicBox {
         }
     }
 
-    private Solution calculateLeaf(byte[][] box, long start, long end) {
+    private Solution calculateLeaf(byte[][] box, long start, long end, Solution initialSolution) {
         // System.out.println("Leaf:" + start + ", " + end + ", " + Thread.currentThread());
-        AtomicReference<Solution> solution = new AtomicReference<Solution>();
-        LongStream.range(start, end).forEach(l -> updateBestSolution(computeScore(box, l), l, solution));
+        AtomicReference<Solution> solution = new AtomicReference<>(initialSolution);
+        Solution initialState = new Solution(computeScore(box, 0), new BitSet());
+        LongStream.range(start, end).forEach(l -> updateBestSolution(computeScore(box, l), l, initialState.score, solution));
         return solution.get();
     }
     
@@ -403,7 +424,8 @@ public class MagicBox {
 
         @Override
         public String toString() {
-            return String.format("score: %d, columns flipped (0-based): %s", score, flips);
+            return String.format("score: %d, columns flipped (0-based): %s (%d flip%s)", score, flips,
+                    flips.cardinality(), flips.cardinality() == 1 ? "" : "s");
         }
     }
 }
