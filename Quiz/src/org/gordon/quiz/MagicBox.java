@@ -16,6 +16,9 @@ package org.gordon.quiz;
  * 1 1 1 1 1
  * 0 1 1 1 0
  * 
+ * Note every box has at least a minimal achievable score of 1 - there is some combination of
+ * flips that will always make at least one row "correct".
+ * 
  * There exists a Knuth algorithm "L" to find all the unique permutations of a set, but in the
  * spirit of the challenge, we don't use this because it's, well, it's cheating!  Besides, this
  * is a very specific subset needed here, only 0's and 1's.
@@ -46,10 +49,11 @@ package org.gordon.quiz;
  * Observed results: adding the optimization to cases 2 and 3 to not compare solutions that could not
  * possibly be winners sped them up to actually make them faster than the pure immutable approach (1).
  * I suspect the overhead of the extra object creation in (1) is a big part of the issue.  Also, in the
- * pure functional approach we are forced to deal with Objects and not primitive types due to the parameterized
- * types, where in (2) and (3), we can do a lot of the comparisons using raw ints and avoid boxing.  Finally,
- * the divide and conquer of (3) is essentially a refinement of (2), and this partitioning into smaller
- * problems makes it into the fastest solution.
+ * pure functional approach we are forced to deal with Objects and not primitive types due to needing to
+ * carry around both a score and the mask of columns flipped (so we need a wrapper object), where in
+ * (2) and (3), we can do a lot of the comparisons using raw ints and avoid boxing.  Finally, the divide
+ * and conquer of (3) is essentially a refinement of (2), and this partitioning into smaller problems
+ * makes it into the fastest solution.
  * 
  * Conclusion: in evolving through various strategies and optimizing the approach to best handle the most
  * likely data sets, I went from the point where what was by far the fastest approach (1) became the slowest
@@ -58,10 +62,10 @@ package org.gordon.quiz;
 
 import java.util.BitSet;
 import java.util.Random;
-import java.util.function.BinaryOperator;
-import java.util.stream.LongStream;
 import java.util.concurrent.RecursiveTask;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BinaryOperator;
+import java.util.stream.LongStream;
 
 public class MagicBox {
 
@@ -194,40 +198,6 @@ public class MagicBox {
         return winnerRef.get();
     }
 
-    // Count the number of rows with identical values given the current mask.
-    // Compare this solution against the best solution seen so far, and update
-    // if this is the best Solution seen so far. Note we do the flip "in-place"
-    // without actually changing the original array.
-    private void updateBestSolution(final int score, final long flipMask, final int initialScore,
-            final AtomicReference<Solution> winner) {
-
-        // This is the equivalent of the filter() we had for the immutable case and adding this renders
-        // the mutable solutions faster than the immutable one.  For large randomly generated boxes, we
-        // get a lot of 0 or low scores that are no better than the initial score, so we can remove much
-        // of the atomic reference contention by avoiding guaranteed losing solutions against other losers.
-        if (score <= initialScore) {
-            return;
-        }
-
-        // Atomically update the best solution if the current one is the
-        // best so far. Note we avoid having to create a Solution object
-        // for a Solution that cannot possible be a winner.
-        winner.getAndUpdate(old -> {
-            if (score > old.score) {
-                return new Solution(score, BitSet.valueOf(new long[] { flipMask }));
-            } else if (score == old.score) {
-                // Only the shortest but set is the winner - if there are
-                // multiple shortest winners,
-                // we pick the first found.
-                BitSet bs = BitSet.valueOf(new long[] { flipMask });
-                if (bs.cardinality() < old.flips.cardinality()) {
-                    return new Solution(score, bs);
-                }
-            }
-            return old;
-        });
-    }
-
     // Begin divide and conquer approach.
  
     /**
@@ -322,6 +292,42 @@ public class MagicBox {
             return s2;
         }
     };
+    
+    // Count the number of rows with identical values given the current mask.
+    // Compare this solution against the best solution seen so far, and update
+    // if this is the best Solution seen so far. Note we do the flip "in-place"
+    // without actually changing the original array.  This is similar to<code>chooseBetterSolution</code>
+    // above, but avoids having to box integers by virtue of not being a generic-based
+    // functional interface.
+    private void updateBestSolution(final int score, final long flipMask, final int initialScore,
+            final AtomicReference<Solution> winner) {
+
+        // This is the equivalent of the filter() we had for the immutable case and adding this renders
+        // the mutable solutions faster than the immutable one.  For large randomly generated boxes, we
+        // get a lot of 0 or low scores that are no better than the initial score, so we can remove much
+        // of the atomic reference contention by avoiding guaranteed losing solutions against other losers.
+        if (score <= initialScore) {
+            return;
+        }
+
+        // Atomically update the best solution if the current one is the
+        // best so far. Note we avoid having to create a Solution object
+        // for a Solution that cannot possible be a winner.
+        winner.getAndUpdate(old -> {
+            if (score > old.score) {
+                return new Solution(score, BitSet.valueOf(new long[] { flipMask }));
+            } else if (score == old.score) {
+                // Only the shortest but set is the winner - if there are
+                // multiple shortest winners,
+                // we pick the first found.
+                BitSet bs = BitSet.valueOf(new long[] { flipMask });
+                if (bs.cardinality() < old.flips.cardinality()) {
+                    return new Solution(score, bs);
+                }
+            }
+            return old;
+        });
+    }
     
     // Ensure the dimensions are rectangular, and also look for the outlier case of the
     // box initially having the maximum score.  Note we throw an unchecked exception
