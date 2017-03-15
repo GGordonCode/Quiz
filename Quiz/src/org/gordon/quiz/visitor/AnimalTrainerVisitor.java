@@ -14,7 +14,7 @@ public class AnimalTrainerVisitor implements AnimalVisitor {
     @Override
     public void visit(Cat cat) {
         System.out.println(String.format("Training cat '%s' ...", cat.getName()));
-        System.out.println("OK, kitty, here's you litter box, now let me explain ...");
+        System.out.println("OK, kitty, here's your litter box, now let me explain ...");
         System.out.println();
     }
 
