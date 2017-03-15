@@ -1,0 +1,8 @@
+The set of classes in this package demonstrates the use of the Gang of Four Visitor pattern, employing interfaces
+for both the visitor and the objects being visited.  You can run the main TestDriver class to see it in action.
+
+The intended use for the Visitor pattern is to add new functionality to an existing class, say, if you are using a
+third-party library you can't modify.
+
+In this case we have Animals with a couple of defined behaviors, eating and vocalizing, and through the Visitor
+pattern we add a way to "train" each animal.
