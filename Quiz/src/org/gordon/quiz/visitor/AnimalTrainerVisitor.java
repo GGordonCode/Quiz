@@ -14,14 +14,14 @@ public class AnimalTrainerVisitor implements AnimalVisitor {
     @Override
     public void visit(Cat cat) {
         System.out.println(String.format("Training cat '%s' ...", cat.getName()));
-        System.out.println("OK, kitty, here's your litter box, now let me explain ...");
+        System.out.println("OK kitty, here's your litter box, now let me explain ...");
         System.out.println();
     }
 
     @Override
     public void visit(Dog dog) {
         System.out.println(String.format("Training dog '%s' ...", dog.getName()));
-        System.out.println("OK, pooch I'm getting the leash, you know what that means!");
+        System.out.println("OK pooch I'm getting the leash, you know what that means!");
         System.out.println();
     }
 

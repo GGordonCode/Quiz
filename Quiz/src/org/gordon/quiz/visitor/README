@@ -6,3 +6,9 @@ third-party library you can't modify.
 
 In this case we have Animals with a couple of defined behaviors, eating and vocalizing, and through the Visitor
 pattern we add a way to "train" each animal.
+
+More generally, this shows a way to implement "double dispatch" in Java.  Here this concept is something like:
+applyFunc((virtual) AnimalVisitor visitor, (virtual) Animal animal).  In other words you want to be able to apply
+any combination of visitor and animal,  Java doesn't support that oot of the box, and the Visitor accomplishes this.
+However, one serious limitation is that you must know all the subclasses of at least on of them (here Animal), or
+else add new ones as they appear.

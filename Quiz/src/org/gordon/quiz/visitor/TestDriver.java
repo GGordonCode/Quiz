@@ -11,6 +11,7 @@ public class TestDriver {
         animals.add(new Lion("Sir"));
         animals.add(new Dog("Fido"));
         AnimalTrainerVisitor trainer = new AnimalTrainerVisitor();
+        AnimalGroomerVisitor groomer = new AnimalGroomerVisitor();
         System.out.println("Doing things with the animals ...");
         System.out.println();
         for (Animal a: animals) {
@@ -18,6 +19,7 @@ public class TestDriver {
             a.vocalize();
             a.eat();
             a.accept(trainer);
+            a.accept(groomer);
         }
     }
 }
