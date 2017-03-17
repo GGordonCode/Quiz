@@ -1,8 +1,14 @@
-The set of classes in this package demonstrates the use of the Gang of Four Visitor pattern, employing interfaces for both the visitor and the objects being visited.  You can run the main TestDriver class to see it in action.
+The set of classes in this package demonstrates the use of the Gang of Four Visitor pattern, employing interfaces
+for both the visitor and the objects being visited.  You can run the main TestDriver class to see it in action.
 
-One intended use for the Visitor pattern is to add new functionality to an existing class, say, if you are using a third-party library you can't modify.
+One intended use for the Visitor pattern is to add new functionality to an existing class, say, if you are using
+a third-party library you can't modify.
 
-In this case we have Animals with a couple of defined behaviors, eating and vocalizing, and through the Visitor pattern we can add a way to "train" or "groom" each animal.
+In this case we have Animals with a couple of defined behaviors, eating and vocalizing, and through the Visitor
+pattern we can add a way to "train" or "groom" each animal.
 
 More generally, this shows a way to implement "double dispatch" in Java.  Here this concept is something like:
-applyFunc((virtual) AnimalVisitor visitor, (virtual) Animal animal).  In other words you want to be able to apply any combination of animal visitor and animal, Java doesn't support that out of the box, and the Visitor accomplishes this. However, one serious limitation is that you must know all the subclasses of at least one of them (here Animal), or else add new ones as they appear.
+applyFunc((virtual) AnimalVisitor visitor, (virtual) Animal animal).  In other words you want to be able to apply
+any combination of animal visitor and animal, Java doesn't support that out of the box, and the Visitor accomplishes this.
+However, one serious limitation is that you must know all the subclasses of at least one of them (here Animal), or else
+add new ones as they appear.
