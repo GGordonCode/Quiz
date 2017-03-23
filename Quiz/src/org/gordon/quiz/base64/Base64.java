@@ -42,36 +42,36 @@ public class Base64 {
             case 0:
                 // At start of word, take top 6 bits, shift right 2.
                 b = (byte) ((curByte & 0xfc) >>> 2);
-                encStr.append(fromByte(b)).toString();
+                encStr.append(fromByte(b));
                 
                 // Take last two bits of this word, shift left 4.  Write
                 // it out if at the end, else hold it for the next iteration.
                 rem = (byte) ((curByte & 0x03) << 4);
                 if (ndx == len - 1) {
-                    encStr.append(fromByte(rem)).toString();
+                    encStr.append(fromByte(rem));
                 }
                 break;
             case 1:
                 // Take the saved part of the previous iteration and
                 // add top 4 bits of current word shift right 4.
                 b = (byte) (rem | (byte) ((curByte & 0xf0) >>> 4));
-                encStr.append(fromByte(b)).toString();
+                encStr.append(fromByte(b));
                 
                 // Take last four bits of this word, shift left 2.  Write
                 // it out if at the end, else hold it for the next iteration.
                 rem = (byte) ((curByte & 0x0f) << 2);
                 if (ndx == len - 1) {
-                    encStr.append(fromByte(rem)).toString();
+                    encStr.append(fromByte(rem));
                 }
                 break;
             case 2:
                 // Take the saved part of the previous iteration,
                 // add top 2 bits of current word shift right 6.
                 b = (byte) (rem | ((curByte & 0xc0) >>> 6));
-                encStr.append(fromByte(b)).toString();
+                encStr.append(fromByte(b));
 
                 // Take last six bits of this word.
-                encStr.append(fromByte((byte) (curByte & 0x3f))).toString();
+                encStr.append(fromByte((byte) (curByte & 0x3f)));
                 rem = 0;
                 break;
             default:
