@@ -82,7 +82,7 @@ public class Base64 {
 
         if ((len % 3) == 1) {
             encStr.append("==");
-        } else if (len %3 == 2) {
+        } else if (len % 3 == 2) {
             encStr.append('=');
         }
 
@@ -115,7 +115,7 @@ public class Base64 {
 
                 // Loop through each of the input bytes.  Given the 4:3 mapping, we essentially
                 // have a finite state machine, whose current state number is captured by the
-                // modulus of the current loop index.  This issomewhat analagous to the encoding
+                // modulus of the current loop index.  This is somewhat analogous to the encoding
                 // algorithm.  Again, each state is pretty much intuitive, in that we need to write
                 // out every octet of contiguous bits, as they become fully available.  For some of
                 // the states, the "unused" bytes are remembered to be included in the next iteration
